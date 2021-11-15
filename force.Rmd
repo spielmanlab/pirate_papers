@@ -1,0 +1,170 @@
+---
+title: "FORCE Analysis"
+author: "Stephanie J. Spielman"
+output: html_document
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, include=TRUE, fig.height = 4, fig.width = 6)
+library(tidyverse)
+library(readxl)
+library(patchwork)
+library(RColorBrewer)
+library(ggwaffle) # devtools::install_github("liamgilbey/ggwaffle")
+theme_set(theme_minimal())
+
+```
+<br><br>
+
+<!--
+##### Notes on data cleaning (for Stephanie)
+
++ The headers ending in `_TEXT` provide the survey responses for the associated questions' "Other" field.
++ Questions with `_` but without `_TEXT` are for multiple choice grids
+
+-->
+
+```{r clean}
+raw <- readxl::read_xlsx("raw_survey_results_11-8-21.xlsx")
+na_string <- "No answer"
+na_color <- "grey80"
+# Subset to demographics data only
+raw %>% 
+  select(ResponseId, starts_with("Q")) %>%
+  select(-Q1, -Q_RecaptchaScore) %>%
+  slice(-1, -2) %>%
+  rename(gender = Q2,
+         age_range = Q3,
+         institution_type = Q4,
+         primary_role = Q5,
+         primary_appointment = Q6) %>%
+  select(-starts_with("Q")) %>%
+  replace_na(list(gender = na_string, 
+                  age_range  = na_string, 
+                  institution_type = na_string,
+                  primary_role = na_string, 
+                  primary_appointment = na_string)) -> demographics_data
+         
+
+# Tibble 
+raw %>% 
+  slice(1) %>%
+  select(starts_with("Q")) %>%
+  select(-Q1, -Q_RecaptchaScore) %>% # Q1 is agreeing to be >=18 years old.
+  pivot_longer(everything(), 
+               names_to = "header", 
+               values_to = "question") -> survey_questions 
+```
+
+
+## Demographics
+<br>
+
+### Gender and age ranges
+
+```{r gender_age, fig.width = 12}
+gender_colors <- c(na_color, brewer.pal(5, "Set1"))
+demographics_data %>%
+  group_by(gender) %>%
+  count(gender) %>%
+  ungroup() %>%
+  mutate(gender = fct_reorder(gender, n),
+         gender = fct_relevel(gender, na_string)) %>%
+  ggplot() + 
+  aes(y = gender, x = n, fill = gender) + 
+  geom_col(color =  "gray40", alpha = 0.8) + 
+  scale_fill_manual(values = gender_colors) + 
+  labs(x = "Number of respondents", 
+       y = "Gender", 
+       title = "Genders of survey respondents") + 
+  theme(legend.position = "none") -> gender_barplot
+
+
+age_colors <- c(na_color, brewer.pal(5, "Reds"))
+demographics_data %>%
+  group_by(age_range) %>%
+  count(age_range) %>%
+  ungroup() %>%
+  mutate(age_range = fct_relevel(age_range, na_string)) %>%
+  ggplot() + 
+  aes(y = age_range,x= n, fill = age_range) + 
+  geom_col(color =  "gray50", alpha = 0.8) + 
+  scale_fill_manual(values = age_colors) + 
+  labs(x = "Number of respondents", 
+       y = "Age ranges", 
+       title = "Age ranges of survey respondents") + 
+  theme(legend.position = "none") -> age_barplot
+
+gender_barplot + age_barplot
+```
+
+<br>
+
+### Institutional types and affiliations
+
+```{r, fig.width = 12}
+inst_type_colors <- c(na_color, brewer.pal(3, "Set2"))
+demographics_data %>%
+  group_by(institution_type) %>%
+  count(institution_type) %>%
+  ungroup() %>%
+  mutate(institution_type = fct_reorder(institution_type, n),
+         institution_type = fct_relevel(institution_type, na_string)) %>%
+  ggplot() + 
+  aes(y = institution_type, x = n, fill = institution_type) + 
+  geom_col(color =  "gray40", alpha = 0.9) + 
+  scale_fill_manual(values = inst_type_colors) + 
+  labs(x = "Number of respondents", 
+       title = "Types of institutions") +
+  theme(legend.position = "none") -> inst_type_plot
+
+
+
+primary_role_colors <- c(na_color, brewer.pal(3, "Set3"))
+demographics_data %>%
+  mutate(primary_role = ifelse(str_detect(primary_role, "Professor"), "Professor", primary_role)) %>%
+  group_by(primary_role) %>%
+  count(primary_role) %>%
+  ungroup() %>%
+  mutate(primary_role = fct_reorder(primary_role, n),
+         primary_role = fct_relevel(primary_role, na_string)) %>%
+  ggplot() + 
+  aes(y = primary_role, x = n, fill = primary_role) + 
+  geom_col(color =  "gray40", alpha = 0.9) + 
+  scale_fill_manual(values = primary_role_colors) + 
+  labs(x = "Number of respondents", 
+       y = "", 
+       title = "Primary roles of respondents") +
+  theme(legend.position = "none") -> role_plot
+
+
+
+inst_type_plot + role_plot
+
+```
+
+```{r affil, fig.width = 8}
+# Some people have MULTIPLE so this is not per person. 
+# Should it be?
+demographics_data %>%
+  mutate(clean_affil = str_replace_all(primary_appointment, 
+                                       "\\s*\\([,\\s\\w]+\\)\\s*",
+                                       "")) %>%
+  select(clean_affil) %>%
+  separate_rows(clean_affil, sep = ",") %>%
+  mutate(clean_affil = ifelse(clean_affil == "Other" | clean_affil == na_string, 
+                              "Other/no answer", 
+                              clean_affil)) %>%
+  waffle_iron(aes_d(group = clean_affil)) %>%
+  ggplot() + 
+  aes(y = y, x =x, fill = group) + 
+  geom_waffle() +
+  coord_equal() +
+  scale_fill_viridis_d(name = "") +
+  labs(title = "Primary affiliations of respondents", x = "", y = "") +
+  theme_waffle() +
+  theme(legend.position = "bottom", 
+        plot.title = element_text(size = 12))
+```
