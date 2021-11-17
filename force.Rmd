@@ -7,7 +7,7 @@ editor_options:
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE, include=TRUE, fig.height = 4, fig.width = 6)
+knitr::opts_chunk$set(echo = FALSE, include=TRUE,warning = FALSE, message=FALSE, fig.height = 4, fig.width = 6)
 library(tidyverse)
 library(readxl)
 library(patchwork)
@@ -56,6 +56,27 @@ raw %>%
   pivot_longer(everything(), 
                names_to = "header", 
                values_to = "question") -> survey_questions 
+
+pirate_order <- c("Sci-Hub", "Library Genesis", "ZLibrary", "Aaaaarg")
+
+           
+# have you heard of things? do you use things?
+raw %>% 
+  select(ResponseId, starts_with("Q11"), starts_with("Q12")) %>%
+  slice(-1, -2) %>%
+  pivot_longer(starts_with("Q"), 
+               names_to = "pirate", 
+               values_to= "survey_answer") %>%
+  mutate(question = ifelse(str_starts(pirate, "Q11"),
+                           "heardof", 
+                           "use")) %>%
+  mutate(pirate = case_when(
+    str_ends(pirate, "_1") ~ pirate_order[1],
+    str_ends(pirate, "_2") ~ pirate_order[2],
+    str_ends(pirate, "_3") ~ pirate_order[3],
+    str_ends(pirate, "_4") ~ pirate_order[4],
+  )) %>%
+  replace_na(list(survey_answer = na_string))-> heardof_use_pirate
 ```
 
 
@@ -162,9 +183,89 @@ demographics_data %>%
   aes(y = y, x =x, fill = group) + 
   geom_waffle() +
   coord_equal() +
-  scale_fill_viridis_d(name = "") +
+  scale_fill_brewer(palette = "Dark2") +
   labs(title = "Primary affiliations of respondents", x = "", y = "") +
   theme_waffle() +
   theme(legend.position = "bottom", 
         plot.title = element_text(size = 12))
+```
+
+
+
+## Have you heard of and/or use pirate sites?
+
+<br><br>
+
+<!--
+In looking at 1 other data point worth sharing what if we shared the one of how prevalent Sci-Hub is from our respondents?
+Which of these pirated sites have you heard of? - Sci-hub (Note: URL changes and may not be active at time of taking survey: https://sci-hub.do)
+--> 
+ 
+```{r haveyouheard, fig.width = 10, fig.height = 5}
+
+heardof_use_pirate %>%
+  filter(question == "heardof") %>%
+  left_join(
+    demographics_data %>%
+      select(ResponseId, primary_role) %>%
+      filter(primary_role == "Librarian" | str_detect(primary_role, "Professor"))
+  ) %>%
+  mutate(survey_answer = fct_relevel(survey_answer, "Yes", "No", na_string),
+         pirate = fct_relevel(pirate, pirate_order)) %>%
+  count(pirate, survey_answer, primary_role) %>%
+  drop_na() %>%
+  ggplot() + 
+  aes(x = pirate, y = n, fill = survey_answer) + 
+  geom_col(position = position_dodge(width = 0.9), color = "black") +
+  facet_wrap(vars(primary_role)) +
+  geom_text(position = position_dodge(width = 0.9), aes(label = n, y = n+2.5), size = 4) + 
+  scale_fill_viridis_d(alpha = 0.8) +
+  labs(x = "Pirate website", 
+       y = "Number of respondents",
+       fill = "Survey response", 
+       title = "Have you heard of this resource?") + 
+  theme(legend.position = "bottom", 
+        plot.title = element_text(size = 16))
+```
+
+<br>
+
+The plot below **only considers** individuals who have heard of the resource. Responses "Always", "Most of the time", "About half the time", "Sometimes" were grouped together as *"Yes. to some degree"* for quick presentation. 
+
+```{r ifheard_doyouuse, fig.width = 10, fig.height = 5}
+# Considering only when heardof!!
+
+heardof_use_pirate %>%
+  filter(question == "heardof",
+         survey_answer == "Yes") %>%
+  select(-question, -survey_answer) %>%
+  inner_join(heardof_use_pirate) %>%
+    left_join(
+    demographics_data %>%
+      select(ResponseId, primary_role) %>%
+      filter(primary_role == "Librarian" | str_detect(primary_role, "Professor"))
+  ) %>%
+  # 0 rows, good.
+  #filter(question == "heardof", survey_answer != "Yes")
+  filter(question == "use") %>%
+  mutate(survey_answer = ifelse(survey_answer != "Never", "Yes, to some degree", "Never"),
+         survey_answer = fct_relevel(survey_answer, "Yes, to some degree"),
+         #fct_relevel(survey_answer, c("Always", "Most of the time", "About half the time", "Sometimes", "Never")),
+         pirate = fct_relevel(pirate, pirate_order)) %>%
+  count(pirate, survey_answer, primary_role) %>%
+  drop_na() %>%
+  ggplot() + 
+  aes(x = pirate, y = n, fill = survey_answer) + 
+  geom_col(position = position_dodge(width = 0.9), color = "black") +
+  geom_text(position = position_dodge(width = 0.9), aes(label = n, y = n+2), size = 4) + 
+  scale_fill_viridis_d(alpha = 0.8) +
+  facet_wrap(vars(primary_role)) +
+  labs(x = "Pirate website", 
+       y = "Number of respondents",
+       fill = "Survey response", 
+       title = "For those who have heard of the resource, do you use it at all?") + 
+  theme(legend.position = "bottom", 
+        plot.title = element_text(size = 16))
+  
+
 ```
