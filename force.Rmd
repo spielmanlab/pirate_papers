@@ -1,7 +1,10 @@
 ---
-title: "FORCE Analysis"
+title: "Survey data analysis for FORCE2021 Presentation"
 author: "Stephanie J. Spielman"
-output: html_document
+output: 
+  html_document:
+    theme: simplex
+    highlight: tango
 editor_options: 
   chunk_output_type: console
 ---
@@ -12,8 +15,14 @@ library(tidyverse)
 library(readxl)
 library(patchwork)
 library(RColorBrewer)
-library(ggwaffle) # devtools::install_github("liamgilbey/ggwaffle")
-theme_set(theme_minimal())
+theme_set(theme_minimal() + 
+            theme(plot.title = element_text(size = rel(1.5)),
+                  plot.title.position = "plot",
+                  axis.text = element_text(size = rel(1.2)),
+                  axis.title = element_text(size = rel(1.2)),
+                  strip.text = element_text(size = rel(1.2)),
+                  legend.position = "bottom")
+)
 
 ```
 <br><br>
@@ -26,11 +35,19 @@ theme_set(theme_minimal())
 
 -->
 
+<!--
+### Data reading and cleaning 
+-->
 ```{r clean}
+
+# Read in the raw data and define some settings for representing NA answers in plots
 raw <- readxl::read_xlsx("raw_survey_results_11-8-21.xlsx")
 na_string <- "No answer"
 na_color <- "grey80"
-# Subset to demographics data only
+bar_outline_color <- "gray40"
+
+
+# Create a dataset with demographics data only
 raw %>% 
   select(ResponseId, starts_with("Q")) %>%
   select(-Q1, -Q_RecaptchaScore) %>%
@@ -48,19 +65,20 @@ raw %>%
                   primary_appointment = na_string)) -> demographics_data
          
 
-# Tibble 
+# Create dataset just containing the survey questions for reference
 raw %>% 
   slice(1) %>%
   select(starts_with("Q")) %>%
-  select(-Q1, -Q_RecaptchaScore) %>% # Q1 is agreeing to be >=18 years old.
+  select(-Q1, -Q_RecaptchaScore) %>% # Q1 is just agreeing to be >=18 years old.
   pivot_longer(everything(), 
                names_to = "header", 
                values_to = "question") -> survey_questions 
 
+# Order for pirate websites to appear in plots
 pirate_order <- c("Sci-Hub", "Library Genesis", "ZLibrary", "Aaaaarg")
 
            
-# have you heard of things? do you use things?
+# Data creation: have you heard of the websites and do you use them?
 raw %>% 
   select(ResponseId, starts_with("Q11"), starts_with("Q12")) %>%
   slice(-1, -2) %>%
@@ -76,14 +94,13 @@ raw %>%
     str_ends(pirate, "_3") ~ pirate_order[3],
     str_ends(pirate, "_4") ~ pirate_order[4],
   )) %>%
-  replace_na(list(survey_answer = na_string))-> heardof_use_pirate
+  replace_na(list(survey_answer = na_string)) -> heardof_use_pirate
 ```
 
 
-## Demographics
+## Demographics and institutional affiliations
 <br>
 
-### Gender and age ranges
 
 ```{r gender_age, fig.width = 12}
 gender_colors <- c(na_color, brewer.pal(5, "Set1"))
@@ -96,11 +113,13 @@ demographics_data %>%
   ggplot() + 
   aes(y = gender, x = n, fill = gender) + 
   geom_col(color =  "gray40", alpha = 0.8) + 
+  geom_text(aes(x = n+4, label = n))+
   scale_fill_manual(values = gender_colors) + 
   labs(x = "Number of respondents", 
        y = "Gender", 
        title = "Genders of survey respondents") + 
-  theme(legend.position = "none") -> gender_barplot
+  theme(legend.position = "none") +
+  xlim(0, 115) -> gender_barplot
 
 
 age_colors <- c(na_color, brewer.pal(5, "Reds"))
@@ -112,38 +131,48 @@ demographics_data %>%
   ggplot() + 
   aes(y = age_range,x= n, fill = age_range) + 
   geom_col(color =  "gray50", alpha = 0.8) + 
+  geom_text(aes(x = n+4, label = n))+
   scale_fill_manual(values = age_colors) + 
   labs(x = "Number of respondents", 
        y = "Age ranges", 
        title = "Age ranges of survey respondents") + 
-  theme(legend.position = "none") -> age_barplot
+  theme(legend.position = "none") +
+  xlim(0, 75) -> age_barplot
 
 gender_barplot + age_barplot
 ```
 
 <br>
 
-### Institutional types and affiliations
 
-```{r, fig.width = 12}
-inst_type_colors <- c(na_color, brewer.pal(3, "Set2"))
+```{r institution, fig.width = 12}
+inst_type_colors <- c(na_color, brewer.pal(3, "Dark2"))
 demographics_data %>%
   group_by(institution_type) %>%
   count(institution_type) %>%
   ungroup() %>%
+  mutate(institution_type = case_when(
+    str_detect(institution_type, "University") ~ "University (R)",
+    str_detect(institution_type, "Four-year") ~ "College (UG)",
+    str_detect(institution_type, "Junior") ~ "Community/Junior/\nTechnical", 
+    TRUE ~ na_string
+  )) %>%
   mutate(institution_type = fct_reorder(institution_type, n),
          institution_type = fct_relevel(institution_type, na_string)) %>%
   ggplot() + 
   aes(y = institution_type, x = n, fill = institution_type) + 
   geom_col(color =  "gray40", alpha = 0.9) + 
+  geom_text(aes(x = n+6, label = n))+
   scale_fill_manual(values = inst_type_colors) + 
   labs(x = "Number of respondents", 
-       title = "Types of institutions") +
-  theme(legend.position = "none") -> inst_type_plot
+       title = "Types of institutions", 
+       y = "") +
+  theme(legend.position = "none") +
+  xlim(0, 150)-> inst_type_plot
 
 
 
-primary_role_colors <- c(na_color, brewer.pal(3, "Set3"))
+primary_role_colors <- c(na_color, brewer.pal(3, "Paired"))
 demographics_data %>%
   mutate(primary_role = ifelse(str_detect(primary_role, "Professor"), "Professor", primary_role)) %>%
   group_by(primary_role) %>%
@@ -153,12 +182,14 @@ demographics_data %>%
          primary_role = fct_relevel(primary_role, na_string)) %>%
   ggplot() + 
   aes(y = primary_role, x = n, fill = primary_role) + 
-  geom_col(color =  "gray40", alpha = 0.9) + 
+  geom_col(color =  bar_outline_color, alpha = 0.9) + 
+  geom_text(aes(x = n+5, label = n))+
   scale_fill_manual(values = primary_role_colors) + 
   labs(x = "Number of respondents", 
        y = "", 
        title = "Primary roles of respondents") +
-  theme(legend.position = "none") -> role_plot
+  theme(legend.position = "none") +
+  xlim(0, 110) -> role_plot
 
 
 
@@ -166,9 +197,9 @@ inst_type_plot + role_plot
 
 ```
 
+
 ```{r affil, fig.width = 8}
-# Some people have MULTIPLE so this is not per person. 
-# Should it be?
+# Some people have MULTIPLE affiliations so this is not per person. 
 demographics_data %>%
   mutate(clean_affil = str_replace_all(primary_appointment, 
                                        "\\s*\\([,\\s\\w]+\\)\\s*",
@@ -177,17 +208,20 @@ demographics_data %>%
   separate_rows(clean_affil, sep = ",") %>%
   mutate(clean_affil = ifelse(clean_affil == "Other" | clean_affil == na_string, 
                               "Other/no answer", 
-                              clean_affil)) %>%
-  waffle_iron(aes_d(group = clean_affil)) %>%
+                              clean_affil)
+        ) %>%
+  count(clean_affil) %>%
+  mutate(clean_affil = fct_reorder(clean_affil, n),
+         clean_affil = fct_relevel(clean_affil, "Other/no answer")) %>%
   ggplot() + 
-  aes(y = y, x =x, fill = group) + 
-  geom_waffle() +
-  coord_equal() +
-  scale_fill_brewer(palette = "Dark2") +
+  aes(y = clean_affil, 
+      x = n, fill = clean_affil) + 
+  geom_col(color = bar_outline_color, alpha = 0.9) +
+  geom_text(aes(label = n, x = n+2)) + 
+  scale_fill_manual(values = c(na_color, rep("darkslateblue", 7))) +
+ # scale_fill_brewer(palette = "Dark2") +
   labs(title = "Primary affiliations of respondents", x = "", y = "") +
-  theme_waffle() +
-  theme(legend.position = "bottom", 
-        plot.title = element_text(size = 12))
+  theme(legend.position = "none")
 ```
 
 
@@ -196,10 +230,6 @@ demographics_data %>%
 
 <br><br>
 
-<!--
-In looking at 1 other data point worth sharing what if we shared the one of how prevalent Sci-Hub is from our respondents?
-Which of these pirated sites have you heard of? - Sci-hub (Note: URL changes and may not be active at time of taking survey: https://sci-hub.do)
---> 
  
 ```{r haveyouheard, fig.width = 10, fig.height = 5}
 
@@ -215,17 +245,15 @@ heardof_use_pirate %>%
   count(pirate, survey_answer, primary_role) %>%
   drop_na() %>%
   ggplot() + 
-  aes(x = pirate, y = n, fill = survey_answer) + 
+  aes(y = pirate, x = n, fill = survey_answer) + 
   geom_col(position = position_dodge(width = 0.9), color = "black") +
   facet_wrap(vars(primary_role)) +
-  geom_text(position = position_dodge(width = 0.9), aes(label = n, y = n+2.5), size = 4) + 
+  geom_text(position = position_dodge(width = 0.9), aes(label = n, x = n+2.5), size = 4) + 
   scale_fill_viridis_d(alpha = 0.8) +
-  labs(x = "Pirate website", 
-       y = "Number of respondents",
+  labs(y = "Pirate website", 
+       x = "Number of respondents",
        fill = "Survey response", 
-       title = "Have you heard of this resource?") + 
-  theme(legend.position = "bottom", 
-        plot.title = element_text(size = 16))
+       title = "Have you heard of this resource?")
 ```
 
 <br>
@@ -255,17 +283,16 @@ heardof_use_pirate %>%
   count(pirate, survey_answer, primary_role) %>%
   drop_na() %>%
   ggplot() + 
-  aes(x = pirate, y = n, fill = survey_answer) + 
+  aes(y = pirate, x = n, fill = survey_answer) + 
   geom_col(position = position_dodge(width = 0.9), color = "black") +
-  geom_text(position = position_dodge(width = 0.9), aes(label = n, y = n+2), size = 4) + 
+  geom_text(position = position_dodge(width = 0.9), aes(label = n, x = n+2), size = 4) + 
   scale_fill_viridis_d(alpha = 0.8) +
   facet_wrap(vars(primary_role)) +
-  labs(x = "Pirate website", 
-       y = "Number of respondents",
+  labs(y = "Pirate website", 
+       x = "Number of respondents",
        fill = "Survey response", 
-       title = "For those who have heard of the resource, do you use it at all?") + 
-  theme(legend.position = "bottom", 
-        plot.title = element_text(size = 16))
-  
+       title = "For those who have heard of the resource, do you use it at all?")
+ 
+
 
 ```
