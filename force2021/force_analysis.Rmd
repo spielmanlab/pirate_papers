@@ -15,6 +15,7 @@ library(tidyverse)
 library(readxl)
 library(patchwork)
 library(RColorBrewer)
+figure_path <- file.path(here::here(), "force2021", "figure_pngs")
 theme_set(theme_minimal() + 
             theme(plot.title = element_text(size = rel(1.5)),
                   plot.title.position = "plot",
@@ -41,7 +42,7 @@ theme_set(theme_minimal() +
 ```{r clean}
 
 # Read in the raw data and define some settings for representing NA answers in plots
-raw <- readxl::read_xlsx("raw_survey_results_11-8-21.xlsx")
+raw <- readxl::read_xlsx(file.path(here::here(),"raw_survey_results_11-8-21.xlsx"))
 na_string <- "No answer"
 na_color <- "grey80"
 bar_outline_color <- "gray40"
@@ -103,7 +104,7 @@ raw %>%
 
 
 ```{r gender_age, fig.width = 12}
-gender_colors <- c(na_color, brewer.pal(5, "Set1"))
+gender_colors <- c(na_color, rep("darkred", 5))
 demographics_data %>%
   group_by(gender) %>%
   count(gender) %>%
@@ -112,14 +113,13 @@ demographics_data %>%
          gender = fct_relevel(gender, na_string)) %>%
   ggplot() + 
   aes(y = gender, x = n, fill = gender) + 
-  geom_col(color =  "gray40", alpha = 0.8) + 
+  geom_col(color =  "gray40", alpha = 0.8) +
+  scale_fill_manual(values = gender_colors) +
   geom_text(aes(x = n+4, label = n))+
-  scale_fill_manual(values = gender_colors) + 
   labs(x = "Number of respondents", 
        y = "Gender", 
        title = "Genders of survey respondents") + 
-  theme(legend.position = "none") +
-  xlim(0, 115) -> gender_barplot
+  theme(legend.position = "none") -> gender_barplot
 
 
 age_colors <- c(na_color, brewer.pal(5, "Reds"))
@@ -140,13 +140,20 @@ demographics_data %>%
   xlim(0, 75) -> age_barplot
 
 gender_barplot + age_barplot
+
+ggsave(file.path(figure_path, "gender_barplot.png"),
+       gender_barplot,
+       width = 6, height = 4)
+
+ggsave(file.path(figure_path, "age_barplot.png"),
+       age_barplot,
+       width = 6, height = 4)
 ```
 
 <br>
 
 
 ```{r institution, fig.width = 12}
-inst_type_colors <- c(na_color, brewer.pal(3, "Dark2"))
 demographics_data %>%
   group_by(institution_type) %>%
   count(institution_type) %>%
@@ -160,10 +167,9 @@ demographics_data %>%
   mutate(institution_type = fct_reorder(institution_type, n),
          institution_type = fct_relevel(institution_type, na_string)) %>%
   ggplot() + 
-  aes(y = institution_type, x = n, fill = institution_type) + 
-  geom_col(color =  "gray40", alpha = 0.9) + 
+  aes(y = institution_type, x = n) + 
+  geom_col(color =  "gray40", alpha = 0.9, fill = "darkslateblue") + 
   geom_text(aes(x = n+6, label = n))+
-  scale_fill_manual(values = inst_type_colors) + 
   labs(x = "Number of respondents", 
        title = "Types of institutions", 
        y = "") +
@@ -181,10 +187,9 @@ demographics_data %>%
   mutate(primary_role = fct_reorder(primary_role, n),
          primary_role = fct_relevel(primary_role, na_string)) %>%
   ggplot() + 
-  aes(y = primary_role, x = n, fill = primary_role) + 
-  geom_col(color =  bar_outline_color, alpha = 0.9) + 
+  aes(y = primary_role, x = n) + 
+  geom_col(color =  bar_outline_color, alpha = 0.9, fill = "darkslateblue") + 
   geom_text(aes(x = n+5, label = n))+
-  scale_fill_manual(values = primary_role_colors) + 
   labs(x = "Number of respondents", 
        y = "", 
        title = "Primary roles of respondents") +
@@ -194,6 +199,14 @@ demographics_data %>%
 
 
 inst_type_plot + role_plot
+
+ggsave(file.path(figure_path, "inst_type_plot.png"),
+       inst_type_plot,
+       width = 6, height = 4)
+
+ggsave(file.path(figure_path, "role_plot.png"),
+       role_plot,
+       width = 6, height = 4)
 
 ```
 
@@ -221,7 +234,14 @@ demographics_data %>%
   scale_fill_manual(values = c(na_color, rep("darkslateblue", 7))) +
  # scale_fill_brewer(palette = "Dark2") +
   labs(title = "Primary affiliations of respondents", x = "", y = "") +
-  theme(legend.position = "none")
+  theme(legend.position = "none") -> affil_plot
+
+affil_plot
+
+ggsave(file.path(figure_path, "affil_plot.png"),
+       affil_plot,
+       width = 8, height = 4)
+
 ```
 
 
@@ -245,15 +265,22 @@ heardof_use_pirate %>%
   count(pirate, survey_answer, primary_role) %>%
   drop_na() %>%
   ggplot() + 
-  aes(y = pirate, x = n, fill = survey_answer) + 
+  aes(x = pirate, y = n, fill = survey_answer) + 
   geom_col(position = position_dodge(width = 0.9), color = "black") +
   facet_wrap(vars(primary_role)) +
-  geom_text(position = position_dodge(width = 0.9), aes(label = n, x = n+2.5), size = 4) + 
+  geom_text(position = position_dodge(width = 0.9), aes(label = n, y = n+3), size = 3.5) + 
   scale_fill_viridis_d(alpha = 0.8) +
-  labs(y = "Pirate website", 
-       x = "Number of respondents",
+  labs(x = "Pirate website", 
+       y = "Number of respondents",
        fill = "Survey response", 
-       title = "Have you heard of this resource?")
+       title = "Have you heard of this resource?") -> heardof_plot
+
+heardof_plot
+
+ggsave(file.path(figure_path, "heardof_plot.png"),
+       heardof_plot,
+       width = 10, height = 4)
+
 ```
 
 <br>
@@ -283,16 +310,19 @@ heardof_use_pirate %>%
   count(pirate, survey_answer, primary_role) %>%
   drop_na() %>%
   ggplot() + 
-  aes(y = pirate, x = n, fill = survey_answer) + 
+  aes(x = pirate, y = n, fill = survey_answer) + 
   geom_col(position = position_dodge(width = 0.9), color = "black") +
-  geom_text(position = position_dodge(width = 0.9), aes(label = n, x = n+2), size = 4) + 
+  geom_text(position = position_dodge(width = 0.9), aes(label = n, y = n+2), size = 4) + 
   scale_fill_viridis_d(alpha = 0.8) +
   facet_wrap(vars(primary_role)) +
-  labs(y = "Pirate website", 
-       x = "Number of respondents",
+  labs(x = "Pirate website", 
+       y = "Number of respondents",
        fill = "Survey response", 
-       title = "For those who have heard of the resource, do you use it at all?")
- 
+       title = "For those who have heard of the resource, do you use it at all?") -> useplot
 
+useplot
 
+ggsave(file.path(figure_path, "useplot_plot.png"),
+       useplot,
+       width = 10, height = 4)
 ```
